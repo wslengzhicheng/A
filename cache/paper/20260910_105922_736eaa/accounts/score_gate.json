@@ -1,0 +1,28 @@
+{
+  "strategy_id": "score_gate",
+  "name": "score_gate",
+  "cash": 851275.396,
+  "init_cash": 1000000.0,
+  "equity": 999150.396,
+  "market_value": 147875.0,
+  "positions": {
+    "002881": {
+      "code": "002881",
+      "qty": 3500,
+      "available_qty": 0,
+      "avg_cost": 42.48,
+      "last_price": 42.25,
+      "pending": [
+        {
+          "qty": 3500,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    }
+  },
+  "params": {
+    "init_cash": 1000000.0,
+    "lot": 100,
+    "target_pct": 0.15
+  }
+}

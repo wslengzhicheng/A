@@ -1,0 +1,18 @@
+{
+  "date": "2026-09-10",
+  "strategies": {
+    "ma_cross": {
+      "init_cash": 1000000.0,
+      "equity": 1000000.0,
+      "total_return": 0.0,
+      "max_drawdown": 0.0,
+      "trade_count": 0,
+      "closed_rounds": 0,
+      "win_rate": 0.0,
+      "buy_count": 0,
+      "sell_count": 0,
+      "fill_count": 0,
+      "fee_total": 0.0
+    }
+  }
+}

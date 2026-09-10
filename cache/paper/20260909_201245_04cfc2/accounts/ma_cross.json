@@ -1,0 +1,28 @@
+{
+  "strategy_id": "ma_cross",
+  "name": "ma_cross",
+  "cash": 850355.12,
+  "init_cash": 1000000.0,
+  "equity": 999955.12,
+  "market_value": 149600.0,
+  "positions": {
+    "000802": {
+      "code": "000802",
+      "qty": 35200,
+      "available_qty": 0,
+      "avg_cost": 4.25,
+      "last_price": 4.25,
+      "pending": [
+        {
+          "qty": 35200,
+          "buy_date": "2026-09-09"
+        }
+      ]
+    }
+  },
+  "params": {
+    "init_cash": 1000000.0,
+    "lot": 100,
+    "target_pct": 0.15
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python *)",
+      "Bash(cmd.exe *)",
+      "Bash(curl -s http://localhost:8888/api/stock_picker)",
+      "Bash(python/python.exe *)",
+      "Bash(curl *)",
+      "Bash(taskkill /F /IM python.exe)",
+      "Bash(start /B python web.py)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :8888)",
+      "Bash(taskkill /F /PID 30272 /PID 5740)",
+      "Bash(taskkill /F /PID 30272 /PID 17836 /PID 5740)"
+    ]
+  }
+}

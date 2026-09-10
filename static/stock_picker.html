@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>收盘前机会扫描 - A股分析</title>
+<style>
+:root { --bg:#0f1923; --card:#1a2634; --border:#2a3a4a; --text:#e0e6ed; --text2:#8899aa; --red:#f5475b; --green:#2ec47c; --blue:#3b82f6; --gold:#f0b90b; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,"Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+.header { background:var(--card); border-bottom:1px solid var(--border); padding:16px 24px; display:flex; align-items:center; gap:16px; position:sticky; top:0; z-index:100; }
+.header h1 { font-size:18px; white-space:nowrap; color:var(--gold); }
+.nav { display:flex; gap:8px; margin-right:12px; }
+.nav a { padding:6px 16px; border-radius:6px; font-size:14px; color:var(--text2); text-decoration:none; border:1px solid var(--border); transition:all .2s; }
+.nav a:hover, .nav a.active { color:#fff; border-color:var(--blue); background:var(--blue); }
+.container { max-width:1400px; margin:0 auto; padding:20px; }
+.card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px 22px; margin-bottom:16px; }
+.card-title { font-size:15px; font-weight:600; margin-bottom:12px; color:var(--gold); display:flex; align-items:center; justify-content:space-between; }
+.summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; }
+.summary-card { padding:16px; background:var(--bg); border-radius:8px; text-align:center; }
+.summary-card .label { font-size:12px; color:var(--text2); margin-bottom:6px; }
+.summary-card .value { font-size:24px; font-weight:700; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { text-align:right; padding:10px; color:var(--text2); font-weight:500; border-bottom:2px solid var(--border); }
+td { text-align:right; padding:8px 10px; border-bottom:1px solid #1e2e3e; }
+td:first-child { text-align:left; cursor:pointer; }
+td:first-child:hover { color:var(--blue); }
+.up { color:var(--red); }
+.down { color:var(--green); }
+.loading { display:none; text-align:center; padding:40px; }
+.loading.active { display:block; }
+.error-box { display:none; background:#2d1b1b; border:1px solid #5c2020; border-radius:8px; padding:16px 20px; margin:20px 0; color:var(--red); }
+.error-box.active { display:block; }
+.btn { padding:10px 20px; background:var(--blue); color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:14px; transition:all .2s; }
+.btn:hover { background:#2563eb; }
+.btn:disabled { opacity:0.6; cursor:not-allowed; }
+.reason-tag { display:inline-block; padding:2px 8px; background:var(--bg); border-radius:4px; font-size:11px; color:var(--text2); margin-right:4px; }
+.score-badge { display:inline-block; padding:4px 10px; border-radius:4px; font-size:12px; font-weight:600; }
+.score-high { background:#1a3d2a; color:var(--green); }
+.score-mid { background:#3d3d1a; color:var(--gold); }
+.signals-mini { display:flex; gap:2px; flex-wrap:wrap; max-width:200px; }
+.signal-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.signal-up { background:var(--red); }
+.signal-down { background:var(--green); }
+.timestamp { font-size:12px; color:var(--text2); margin-bottom:12px; }
+.last-updated { text-align:center; padding:20px; color:var(--text2); font-size:13px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🎯 收盘前机会扫描</h1>
+          <div class="nav">
+    <a href="/">个股分析</a>
+    <a href="/compare.html">选股对比</a>
+    <a href="/backtest.html">回测验证</a>
+    <a href="/paper.html">模拟盘</a>
+    <a href="/watchlist.html">我的盯盘</a>
+    <a href="/market_overview.html">市场概览</a>
+    <a href="/market.html">板块排行</a>
+    <a href="/stock_picker.html" class="active">机会扫描</a>
+  </div>
+</div>
+
+<div class="container">
+  <div style="background:#2d2410;border:1px solid #6b5420;color:#f0d78c;border-radius:8px;padding:12px 16px;margin:16px 20px 0;font-size:13px;line-height:1.6">本页为<strong>机会扫描 / 观察名单</strong>，仅供研究参考，不构成任何投资建议。市场有风险，决策请独立判断。</div>
+  <div class="card">
+    <div class="card-title">
+      <span>📊 筛选统计</span>
+      <button class="btn" onclick="refreshData(true)">强制刷新</button>
+      <button class="btn" onclick="showDemoData()">使用示例数据</button>
+    </div>
+    <div class="summary-grid" id="summaryGrid">
+      <div class="summary-card">
+        <div class="label">候选股票数</div>
+        <div class="value" id="candidatesCount">-</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">已分析股票</div>
+        <div class="value" id="analyzedCount">-</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">机会扫描</div>
+        <div class="value" id="opportunitiesCount">-</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">平均评分</div>
+        <div class="value" id="avgScore">-</div>
+      </div>
+    </div>
+    <div class="timestamp" id="updateTime"></div>
+    <div class="timestamp" id="scoreNote" style="display:none;color:var(--gold);"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📈 机会扫描详情</div>
+    <div class="error-box" id="errorBox"></div>
+    <div class="loading" id="loading">
+      <div style="font-size:16px; margin-bottom:10px;">🔍 正在筛选股票...</div>
+      <div style="color:var(--text2); font-size:13px;">这可能需要1-3分钟，请耐心等待</div>
+    </div>
+    <div id="resultsContainer">
+      <table id="resultsTable">
+        <thead>
+          <tr>
+            <th>股票</th>
+            <th>现价</th>
+            <th>涨跌幅</th>
+            <th>评分</th>
+            <th>信号</th>
+            <th>主力净流</th>
+            <th>买入理由</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="last-updated" id="lastUpdated"></div>
+</div>
+
+<script>
+let currentData = null;
+
+function showLoading(show) {
+  document.getElementById('loading').classList.toggle('active', show);
+}
+
+function showError(message) {
+  const box = document.getElementById('errorBox');
+  box.textContent = message;
+  box.classList.toggle('active', !!message);
+}
+
+function formatNumber(num, decimals = 2) {
+  if (num === null || num === undefined) return '-';
+  return num.toFixed(decimals);
+}
+
+function formatVolume(num) {
+  if (num === null || num === undefined) return '-';
+  if (Math.abs(num) >= 10000) return (num / 10000).toFixed(2) + '亿';
+  return num.toFixed(2) + '万';
+}
+
+function formatChangePct(value) {
+  if (value === null || value === undefined) return '-';
+  const pct = Math.abs(value) <= 1 ? value * 100 : value;
+  return formatNumber(pct, 2);
+}
+
+function getScoreClass(score) {
+  if (score >= 70) return 'score-high';
+  if (score >= 60) return 'score-mid';
+  return '';
+}
+
+function updateScoreNote(data) {
+  const el = document.getElementById('scoreNote');
+  if (!el) return;
+  const src = data && data.score_source;
+  const note = data && data.score_note;
+  if (src || note) {
+    const parts = [];
+    if (src) parts.push(`评分来源：${src}`);
+    if (note) parts.push(note);
+    el.textContent = parts.join(' · ');
+    el.style.display = 'block';
+  } else {
+    el.textContent = '';
+    el.style.display = 'none';
+  }
+}
+
+function updateSummary(summary) {
+  document.getElementById('candidatesCount').textContent = summary.total_analyzed || '-';
+  document.getElementById('analyzedCount').textContent = summary.success_count || '-';
+  document.getElementById('opportunitiesCount').textContent = summary.opportunities_count || '-';
+  document.getElementById('avgScore').textContent = formatNumber(summary.avg_score, 1);
+}
+
+function renderResults(opportunities) {
+  const tbody = document.getElementById('resultsBody');
+  tbody.innerHTML = '';
+
+  if (!opportunities || opportunities.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text2); padding:30px;">暂无符合条件的机会扫描</td></tr>';
+    return;
+  }
+
+  opportunities.forEach((opp, index) => {
+    const price = formatNumber(opp.price, 2);
+    const changeValue = Math.abs(opp.change_pct || 0) <= 1 ? (opp.change_pct || 0) * 100 : (opp.change_pct || 0);
+    const change = formatChangePct(opp.change_pct);
+    const changeClass = changeValue >= 0 ? 'up' : 'down';
+    const changeSymbol = changeValue >= 0 ? '+' : '';
+
+    const score = formatNumber(opp.score, 1);
+    const scoreClass = getScoreClass(opp.score);
+
+    const signals = opp.signals || [];
+    const bullishCount = signals.filter(s => s.score > 0).length;
+    const bearishCount = signals.filter(s => s.score < 0).length;
+    const netSignals = bullishCount - bearishCount;
+
+    const mainNet = formatVolume(opp.main_net);
+    const netClass = opp.main_net >= 0 ? 'up' : 'down';
+
+    const buyReason = opp.buy_reason || '暂无明显买入信号';
+    const candidateReason = opp.candidate_reason ? `<span class="reason-tag">${opp.candidate_reason}</span>` : '';
+
+    const signalsDots = Array(Math.min(Math.abs(netSignals), 10)).fill(0)
+      .map(() => `<span class="signal-dot ${netSignals > 0 ? 'signal-up' : 'signal-down'}"></span>`)
+      .join('');
+
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.dataset.code = opp.code;
+    tr.innerHTML = `
+      <td>
+        <div style="font-weight:600;">${opp.name}</div>
+        <div style="font-size:11px; color:var(--text2);" class="code">${opp.code}</div>
+        ${candidateReason}
+      </td>
+      <td>${price}</td>
+      <td class="${changeClass}">${changeSymbol}${change}%</td>
+      <td><span class="score-badge ${scoreClass}">${score}</span></td>
+      <td>
+        <div class="signals-mini">${signalsDots}</div>
+        <div style="font-size:11px; color:var(--text2); margin-top:2px;">${bullishCount}多/${bearishCount}空</div>
+      </td>
+      <td class="${netClass}">${mainNet}</td>
+      <td style="text-align:left; max-width:300px;">${buyReason}</td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+function showDemoData() {
+  // 显示示例数据
+  const demoData = {
+    timestamp: new Date().getTime(),
+    candidates_count: 5,
+    analyzed_count: 5,
+    opportunities: [
+      {
+        "success": true,
+        "code": "300750",
+        "name": "宁德时代",
+        "market": "sz",
+        "price": 80.0,
+        "change_pct": -0.02,
+        "score": 72.0,
+        "reason": "基于跌势和资金流入的综合评分",
+        "has_buy_point": true,
+        "signals": [
+          {"name": "均线排列", "score": 1, "text": "短期均线向上"},
+          {"name": "MACD", "score": 1, "text": "MACD金叉"}
+        ],
+        "buy_reason": "综合评分72.0分，基于跌势和资金流入的综合评分，主力资金净流入2000万元",
+        "candidate_reason": "超跌反弹",
+        "bullish_count": 2,
+        "bearish_count": 0
+      },
+      {
+        "success": true,
+        "code": "600036",
+        "name": "招商银行",
+        "market": "sh",
+        "price": 115.0,
+        "change_pct": 0.015,
+        "score": 69.0,
+        "reason": "基于温和上涨和资金流入的综合评分",
+        "has_buy_point": true,
+        "signals": [
+          {"name": "均线排列", "score": 1, "text": "短期均线向上"},
+          {"name": "MACD", "score": 1, "text": "MACD金叉"}
+        ],
+        "buy_reason": "综合评分69.0分，基于温和上涨和资金流入的综合评分，主力资金净流入4000万元",
+        "candidate_reason": "温和上涨",
+        "bullish_count": 2,
+        "bearish_count": 0
+      },
+      {
+        "success": true,
+        "code": "600519",
+        "name": "贵州茅台",
+        "market": "sh",
+        "price": 1800.0,
+        "change_pct": 0.03,
+        "score": 78.0,
+        "reason": "基于强势上涨和估值水平的综合评分",
+        "has_buy_point": true,
+        "signals": [
+          {"name": "均线排列", "score": 2, "text": "均线多头排列"},
+          {"name": "MACD", "score": 1, "text": "MACD金叉"}
+        ],
+        "buy_reason": "综合评分78.0分，基于强势上涨和估值水平的综合评分，主力资金净流入5000万元",
+        "candidate_reason": "强势上涨",
+        "bullish_count": 3,
+        "bearish_count": 0
+      }
+    ],
+    summary: {
+      total_analyzed: 5,
+      success_count: 3,
+      failed_count: 0,
+      opportunities_count: 3,
+      avg_score: 73.0
+    }
+  };
+
+  updateSummary(demoData.summary);
+  renderResults(demoData.opportunities);
+  updateScoreNote({ score_source: 'demo', score_note: '演示数据，非实盘评分' });
+
+  const updateTime = new Date();
+  document.getElementById('updateTime').textContent = `示例数据 - ${updateTime.toLocaleString('zh-CN')}`;
+  document.getElementById('lastUpdated').textContent = `上次更新：${updateTime.toLocaleString('zh-CN')}`;
+}
+
+async function refreshData(fresh = false) {
+  showLoading(true);
+  showError('');
+
+  try {
+    const params = fresh ? '?mode=simple&fresh=1' : '?mode=simple';
+    const response = await fetch(`/api/stock_picker${params}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || '请求失败');
+    }
+
+    currentData = data;
+
+    if (data.summary) {
+      updateSummary(data.summary);
+    }
+
+    renderResults(data.opportunities);
+    updateScoreNote(data);
+
+    const updateTime = new Date(data.timestamp * 1000);
+    document.getElementById('updateTime').textContent = `更新时间：${updateTime.toLocaleString('zh-CN')}`;
+    document.getElementById('lastUpdated').textContent = `上次刷新：${updateTime.toLocaleString('zh-CN')}`;
+
+  } catch (error) {
+    showError(error.message + '，已切换为示例数据');
+    showDemoData();
+    console.error('获取数据失败:', error);
+  } finally {
+    showLoading(false);
+  }
+}
+
+// 页面加载时自动获取数据
+document.addEventListener('DOMContentLoaded', () => {
+  refreshData();
+
+  // 每5分钟自动刷新
+  setInterval(() => {
+    if (!document.hidden) {
+      refreshData();
+    }
+  }, 5 * 60 * 1000);
+});
+
+// 点击股票行跳转到详情页并带上代码，首页会自动直接查询
+document.getElementById('resultsBody').addEventListener('click', (e) => {
+  const td = e.target.closest('td');
+  if (td && td.parentElement.querySelector('td')) {
+    const row = td.closest('tr');
+    const code = row && row.dataset ? row.dataset.code : '';
+    if (code) {
+      window.location.href = `/?q=${encodeURIComponent(code)}`;
+    }
+  }
+});
+</script>
+
+</body>
+</html>

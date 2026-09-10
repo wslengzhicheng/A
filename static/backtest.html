@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>策略回测 - A股分析</title>
+<style>
+:root { --bg:#0f1923; --card:#1a2634; --border:#2a3a4a; --text:#e0e6ed; --text2:#8899aa; --red:#f5475b; --green:#2ec47c; --blue:#3b82f6; --gold:#f0b90b; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,"Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+.header { background:var(--card); border-bottom:1px solid var(--border); padding:16px 24px; display:flex; align-items:center; gap:16px; position:sticky; top:0; z-index:100; }
+.header h1 { font-size:18px; white-space:nowrap; color:var(--gold); }
+.nav { display:flex; gap:8px; margin-right:12px; }
+.nav a { padding:6px 16px; border-radius:6px; font-size:14px; color:var(--text2); text-decoration:none; border:1px solid var(--border); transition:all .2s; }
+.nav a:hover, .nav a.active { color:#fff; border-color:var(--blue); background:var(--blue); }
+.container { max-width:1400px; margin:0 auto; padding:20px; }
+.card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px 22px; margin-bottom:16px; }
+.card-title { font-size:15px; font-weight:600; margin-bottom:12px; color:var(--gold); }
+.input-group { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+.input-group input, .input-group select { padding:10px 14px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font-size:14px; }
+.input-group input { flex:1; min-width:200px; }
+.btn { padding:10px 20px; border:none; border-radius:6px; font-size:14px; cursor:pointer; transition:all .2s; font-weight:500; }
+.btn-primary { background:var(--blue); color:#fff; }
+.btn-primary:hover { background:#2563eb; }
+.btn-outline { background:transparent; color:var(--text2); border:1px solid var(--border); }
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; }
+.stat-card { padding:16px; background:var(--bg); border-radius:8px; text-align:center; }
+.stat-card .label { font-size:12px; color:var(--text2); margin-bottom:6px; }
+.stat-card .value { font-size:24px; font-weight:700; }
+.stat-card .sub { font-size:11px; color:var(--text2); margin-top:4px; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { text-align:right; padding:10px; color:var(--text2); font-weight:500; border-bottom:2px solid var(--border); }
+td { text-align:right; padding:8px 10px; border-bottom:1px solid #1e2e3e; }
+td:first-child { text-align:left; }
+.up { color:var(--red); }
+.down { color:var(--green); }
+.loading { display:none; text-align:center; padding:40px; }
+.loading.active { display:block; }
+.error-box { display:none; background:#2d1b1b; border:1px solid #5c2020; border-radius:8px; padding:16px 20px; margin:20px 0; color:var(--red); }
+.error-box.active { display:block; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🧪 策略回测</h1>
+          <div class="nav">
+    <a href="/">个股分析</a>
+    <a href="/compare.html">选股对比</a>
+    <a href="/backtest.html" class="active">回测验证</a>
+    <a href="/paper.html">模拟盘</a>
+    <a href="/watchlist.html">我的盯盘</a>
+    <a href="/market_overview.html">市场概览</a>
+    <a href="/market.html">板块排行</a>
+    <a href="/stock_picker.html">机会扫描</a>
+  </div>
+</div>
+
+<div class="container">
+  <!-- Config -->
+  <div class="card">
+    <div class="card-title">⚙️ 回测配置</div>
+    <div class="input-group">
+      <input type="text" id="stockInput" placeholder="股票代码或名称（如 600519）" value="600519">
+      <select id="strategySelect">
+        <option value="chanlun">缠论买卖点</option>
+        <option value="ma_cross">均线金叉死叉（MA5/MA10）</option>
+        <option value="macd">MACD金叉死叉</option>
+        <option value="buy_opp">买入机会筛选（评分+信号）</option>
+      </select>
+      <select id="daysSelect">
+        <option value="120">120日</option>
+        <option value="250" selected>250日</option>
+        <option value="320">320日</option>
+      </select>
+      <input type="number" id="holdDays" placeholder="持有天数" value="10" min="1" max="30" style="width:100px">
+      <input type="number" id="stopLoss" placeholder="止损%" value="5" min="1" max="20" style="width:100px">
+      <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--text2)">
+        <input type="checkbox" id="freshCheck"> 刷新
+      </label>
+      <button class="btn btn-primary" onclick="runBacktest()">运行回测</button>
+      <button class="btn btn-outline" onclick="exportCSV()">导出CSV</button>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div class="error-box" id="errorSection"></div>
+
+  <!-- Loading -->
+  <div class="loading" id="loadingSection">
+    <p>正在回测，请稍候...</p>
+  </div>
+
+  <!-- Results -->
+  <div id="resultsSection" style="display:none">
+    <!-- Performance Stats -->
+    <div class="card">
+      <div class="card-title">📊 回测绩效</div>
+      <div class="stats-grid" id="statsGrid"></div>
+    </div>
+
+    <!-- Benchmark -->
+    <div class="card">
+      <div class="card-title">🎯 基准对比</div>
+      <div class="stats-grid" id="benchmarkGrid"></div>
+    </div>
+
+    <!-- Trades Table -->
+    <div class="card">
+      <div class="card-title">📝 交易明细（共 <span id="tradeCount">0</span> 笔）</div>
+      <div style="overflow-x:auto">
+        <table id="tradesTable"></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function fmt(v, nd=2) { return v == null ? '—' : Number(v).toFixed(nd); }
+function cls(v) { return v > 0 ? 'up' : v < 0 ? 'down' : ''; }
+function pct(v) { return v != null ? (v > 0 ? '+' : '') + Number(v).toFixed(2) + '%' : '—'; }
+
+let backtestData = null;
+
+async function runBacktest() {
+  const query = $('stockInput').value.trim();
+  if(!query) { showError('请输入股票代码'); return; }
+
+  const strategy = $('strategySelect').value;
+  const days = parseInt($('daysSelect').value);
+  const holdDays = parseInt($('holdDays').value) || 10;
+  const stopLoss = (parseFloat($('stopLoss').value) || 5) / 100;
+  const fresh = $('freshCheck').checked ? '1' : '0';
+
+  $('loadingSection').classList.add('active');
+  $('errorSection').classList.remove('active');
+  $('resultsSection').style.display = 'none';
+
+  try {
+    const resp = await fetch(`/api/backtest?q=${encodeURIComponent(query)}&strategy=${strategy}&days=${days}&hold_days=${holdDays}&stop_loss=${stopLoss}&fresh=${fresh}`);
+    const data = await resp.json();
+    if(!resp.ok) { showError(data.error || '回测失败'); return; }
+    backtestData = data;
+    renderResults(data);
+    $('resultsSection').style.display = '';
+  } catch(e) {
+    showError('请求失败: ' + e.message);
+  } finally {
+    $('loadingSection').classList.remove('active');
+  }
+}
+
+function showError(msg) {
+  $('errorSection').textContent = '❌ ' + msg;
+  $('errorSection').classList.add('active');
+}
+
+function renderResults(data) {
+  const stats = data.performance || {};
+  const trades = data.trades || [];
+  const benchmark = data.benchmark || {};
+
+  // Stats
+  $('statsGrid').innerHTML = `
+    <div class="stat-card">
+      <div class="label">总交易</div>
+      <div class="value">${stats.total_trades || 0}</div>
+      <div class="sub">胜 ${stats.win_trades || 0} / 负 ${stats.lose_trades || 0}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">胜率</div>
+      <div class="value ${stats.win_rate >= 60 ? 'up' : stats.win_rate <= 40 ? 'down' : ''}">${fmt(stats.win_rate, 1)}%</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">总收益</div>
+      <div class="value ${cls(stats.total_pnl)}">${pct(stats.total_pnl)}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">盈亏比</div>
+      <div class="value">${fmt(stats.profit_factor)}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">最大回撤</div>
+      <div class="value down">${fmt(stats.max_drawdown, 1)}%</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">夏普比率</div>
+      <div class="value">${fmt(stats.sharpe_ratio, 2)}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">平均持有</div>
+      <div class="value">${fmt(stats.avg_hold_days, 1)}天</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">策略Alpha</div>
+      <div class="value ${cls(data.strategy_alpha)}">${pct(data.strategy_alpha)}</div>
+    </div>
+  `;
+
+  // Benchmark
+  $('benchmarkGrid').innerHTML = `
+    <div class="stat-card">
+      <div class="label">随机入场平均</div>
+      <div class="value">${pct(benchmark.random_entry?.avg_return)}</div>
+      <div class="sub">胜率 ${fmt(benchmark.random_entry?.win_rate, 1)}%</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">买入持有</div>
+      <div class="value ${cls(benchmark.buy_hold?.return)}">${pct(benchmark.buy_hold?.return)}</div>
+    </div>
+  `;
+
+  // Trades
+  $('tradeCount').textContent = trades.length;
+  if(!trades.length) {
+    $('tradesTable').innerHTML = '<tr><td colspan="5" style="padding:20px;text-align:center">无交易记录</td></tr>';
+    return;
+  }
+
+  let html = '<thead><tr><th>买入日期</th><th>买入价</th><th>卖出日期</th><th>卖出价</th><th>收益率</th><th>持有天数</th><th>原因</th></tr></thead><tbody>';
+  trades.forEach(t => {
+    html += `<tr>
+      <td>${t.entry_date}</td>
+      <td>${fmt(t.entry_price, 2)}</td>
+      <td>${t.exit_date}</td>
+      <td>${fmt(t.exit_price, 2)}</td>
+      <td class="${cls(t.pnl_pct)}">${pct(t.pnl_pct)}</td>
+      <td>${t.hold_days}</td>
+      <td>${t.reason}</td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  $('tradesTable').innerHTML = html;
+}
+
+function exportCSV() {
+  if(!backtestData || !backtestData.trades) {
+    alert('请先运行回测');
+    return;
+  }
+
+  const trades = backtestData.trades;
+  let csv = '买入日期,买入价,卖出日期,卖出价,收益率,持有天数,原因\n';
+  trades.forEach(t => {
+    csv += `${t.entry_date},${fmt(t.entry_price, 4)},${t.exit_date},${fmt(t.exit_price, 4)},${t.pnl_pct},${t.hold_days},${t.reason}\n`;
+  });
+
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `回测_${backtestData.code}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+$('stockInput').addEventListener('keydown', e => { if(e.key === 'Enter') runBacktest(); });
+</script>
+</body>
+</html>

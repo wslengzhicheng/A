@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>市场概览 - A股分析</title>
+<style>
+:root { --bg:#0f1923; --card:#1a2634; --border:#2a3a4a; --text:#e0e6ed; --text2:#8899aa; --red:#f5475b; --green:#2ec47c; --blue:#3b82f6; --gold:#f0b90b; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,"Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+.header { background:var(--card); border-bottom:1px solid var(--border); padding:16px 24px; display:flex; align-items:center; gap:16px; position:sticky; top:0; z-index:100; }
+.header h1 { font-size:18px; white-space:nowrap; color:var(--gold); }
+.nav { display:flex; gap:8px; margin-right:12px; }
+.nav a { padding:6px 16px; border-radius:6px; font-size:14px; color:var(--text2); text-decoration:none; border:1px solid var(--border); transition:all .2s; }
+.nav a:hover, .nav a.active { color:#fff; border-color:var(--blue); background:var(--blue); }
+.container { max-width:1400px; margin:0 auto; padding:20px; }
+.card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px 22px; margin-bottom:16px; }
+.card-title { font-size:15px; font-weight:600; margin-bottom:12px; color:var(--gold); display:flex; align-items:center; justify-content:space-between; }
+.summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; }
+.summary-card { padding:16px; background:var(--bg); border-radius:8px; text-align:center; }
+.summary-card .label { font-size:12px; color:var(--text2); margin-bottom:6px; }
+.summary-card .value { font-size:24px; font-weight:700; }
+.index-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
+.index-card { padding:18px; background:var(--bg); border-radius:8px; text-align:center; border:1px solid var(--border); }
+.index-card .name { font-size:14px; color:var(--text2); margin-bottom:8px; }
+.index-card .price { font-size:26px; font-weight:700; margin-bottom:4px; }
+.index-card .change { font-size:16px; font-weight:600; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { text-align:right; padding:10px; color:var(--text2); font-weight:500; border-bottom:2px solid var(--border); }
+td { text-align:right; padding:8px 10px; border-bottom:1px solid #1e2e3e; }
+td:first-child { text-align:left; cursor:pointer; }
+td:first-child:hover { color:var(--blue); }
+.up { color:var(--red); }
+.down { color:var(--green); }
+.loading { display:none; text-align:center; padding:40px; }
+.loading.active { display:block; }
+.error-box { display:none; background:#2d1b1b; border:1px solid #5c2020; border-radius:8px; padding:16px 20px; margin:20px 0; color:var(--red); }
+.error-box.active { display:block; }
+.sentiment-bar { height:8px; background:var(--border); border-radius:4px; overflow:hidden; margin-top:8px; }
+.sentiment-fill { height:100%; border-radius:4px; transition:width .5s ease; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📈 市场概览</h1>
+          <div class="nav">
+    <a href="/">个股分析</a>
+    <a href="/compare.html">选股对比</a>
+    <a href="/backtest.html">回测验证</a>
+    <a href="/paper.html">模拟盘</a>
+    <a href="/watchlist.html">我的盯盘</a>
+    <a href="/market_overview.html" class="active">市场概览</a>
+    <a href="/market.html">板块排行</a>
+    <a href="/stock_picker.html">机会扫描</a>
+  </div>
+  <button class="btn btn-outline" onclick="refreshData()" style="margin-left:auto;font-size:13px;padding:6px 14px">↻ 刷新</button>
+</div>
+
+<div class="container">
+  <!-- Market Overview -->
+  <div class="card">
+    <div class="card-title">📊 市场整体统计</div>
+    <div class="summary-grid" id="marketSummary"></div>
+  </div>
+
+  <!-- Indices -->
+  <div class="card">
+    <div class="card-title">📈 主要指数</div>
+    <div class="index-grid" id="indicesGrid"></div>
+  </div>
+
+  <!-- Limit Up -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="card">
+      <div class="card-title">🔥 涨停榜 Top 10</div>
+      <table id="limitUpTable"></table>
+    </div>
+    <div class="card">
+      <div class="card-title">📉 跌停榜 Top 10</div>
+      <table id="limitDownTable"></table>
+    </div>
+  </div>
+</div>
+
+<div class="error-box" id="errorSection"></div>
+<div class="loading" id="loadingSection">
+  <p>正在加载数据...</p>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function fmt(v, nd=2) { return v == null ? '—' : Number(v).toFixed(nd); }
+function cls(v) { return v > 0 ? 'up' : v < 0 ? 'down' : ''; }
+function pct(v) { return v != null ? (v > 0 ? '+' : '') + Number(v).toFixed(2) + '%' : '—'; }
+function fmtWan(v) {
+  if(v == null) return '—';
+  const abs = Math.abs(v);
+  if(abs >= 1e8) return (v / 1e8).toFixed(2) + '亿';
+  if(abs >= 1e4) return (v / 1e4).toFixed(0) + '万';
+  return v.toFixed(0);
+}
+
+async function refreshData() {
+  $('loadingSection').classList.add('active');
+  $('errorSection').classList.remove('active');
+
+  try {
+    const resp = await fetch('/api/market');
+    const data = await resp.json();
+    if(!resp.ok) {
+      showError(data.error || '获取数据失败');
+      return;
+    }
+    renderMarket(data);
+  } catch(e) {
+    showError('请求失败: ' + e.message);
+  } finally {
+    $('loadingSection').classList.remove('active');
+  }
+}
+
+function showError(msg) {
+  $('errorSection').textContent = '❌ ' + msg;
+  $('errorSection').classList.add('active');
+}
+
+function renderMarket(data) {
+  const overview = data.overview || {};
+  const indices = data.indices || [];
+  const limitUp = data.limit_up || [];
+  const limitDown = data.limit_down || [];
+
+  if (data.warning) {
+    showError(data.warning);
+  } else {
+    $('errorSection').classList.remove('active');
+  }
+
+  // Market Summary
+  const upDownRatio = overview.down_count ? (overview.up_count / overview.down_count).toFixed(2) : '∞';
+  const limitUpCount = overview.limit_up || 0;
+  const limitDownCount = overview.limit_down || 0;
+  const limitRatio = (limitUpCount + limitDownCount) ?
+                     (limitUpCount / (limitUpCount + limitDownCount) * 100).toFixed(1) : 50;
+  const sentimentColor = limitRatio >= 70 ? 'var(--red)' : limitRatio <= 30 ? 'var(--green)' : 'var(--gold)';
+
+  $('marketSummary').innerHTML = `
+    <div class="summary-card">
+      <div class="label">总股票</div>
+      <div class="value">${overview.total_stocks || 0}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">上涨/下跌</div>
+      <div class="value">${overview.up_count || 0} / ${overview.down_count || 0}</div>
+      <div class="sub">比 ${upDownRatio}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">涨停/跌停</div>
+      <div class="value">${overview.limit_up || 0} / ${overview.limit_down || 0}</div>
+      <div class="sub">涨停率 ${limitRatio}%</div>
+      <div class="sentiment-bar"><div class="sentiment-fill" style="width:${limitRatio}%;background:${sentimentColor}"></div></div>
+    </div>
+    <div class="summary-card">
+      <div class="label">平均涨跌</div>
+      <div class="value ${cls(overview.avg_change_pct)}">${pct(overview.avg_change_pct)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">主力净流入</div>
+      <div class="value ${cls(overview.total_main_net)}">${fmtWan(overview.total_main_net)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">总市值</div>
+      <div class="value">${fmt(overview.total_market_cap, 1)}万亿</div>
+    </div>
+  `;
+
+  // Indices
+  $('indicesGrid').innerHTML = indices.map(idx => {
+    if(idx.error) return `<div class="index-card"><div class="name">${idx.name}</div><div style="color:var(--text2);font-size:12px">获取失败</div></div>`;
+    return `
+      <div class="index-card">
+        <div class="name">${idx.name}</div>
+        <div class="price ${cls(idx.change_pct)}">${fmt(idx.price, 2)}</div>
+        <div class="change ${cls(idx.change_pct)}">${pct(idx.change_pct)}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px">成交量 ${fmtWan(idx.volume)}</div>
+      </div>
+    `;
+  }).join('');
+
+  // Limit Up
+  let upHtml = '<thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨幅</th></tr></thead><tbody>';
+  limitUp.forEach(s => {
+    upHtml += `<tr>
+      <td onclick="goStock('${s.code}')" style="cursor:pointer">${s.code}</td>
+      <td onclick="goStock('${s.code}')" style="cursor:pointer">${s.name}</td>
+      <td class="up">${fmt(s.price, 2)}</td>
+      <td class="up">${pct(s.change_pct)}</td>
+    </tr>`;
+  });
+  upHtml += '</tbody>';
+  $('limitUpTable').innerHTML = upHtml || '<tr><td colspan="4" style="padding:20px;text-align:center">无数据</td></tr>';
+
+  // Limit Down
+  let downHtml = '<thead><tr><th>代码</th><th>名称</th><th>现价</th><th>跌幅</th></tr></thead><tbody>';
+  limitDown.forEach(s => {
+    downHtml += `<tr>
+      <td onclick="goStock('${s.code}')" style="cursor:pointer">${s.code}</td>
+      <td onclick="goStock('${s.code}')" style="cursor:pointer">${s.name}</td>
+      <td class="down">${fmt(s.price, 2)}</td>
+      <td class="down">${pct(s.change_pct)}</td>
+    </tr>`;
+  });
+  downHtml += '</tbody>';
+  $('limitDownTable').innerHTML = downHtml || '<tr><td colspan="4" style="padding:20px;text-align:center">无数据</td></tr>';
+}
+
+function goStock(code) {
+  window.location.href = `/?q=${code}`;
+}
+
+// Auto-load
+refreshData();
+
+// Auto-refresh every 60 seconds
+setInterval(refreshData, 60000);
+</script>
+</body>
+</html>

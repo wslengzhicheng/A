@@ -1,0 +1,80 @@
+{
+  "strategy_id": "macd",
+  "name": "macd",
+  "cash": 289248.8386,
+  "init_cash": 1000000.0,
+  "equity": 999786.8386,
+  "market_value": 710538.0,
+  "positions": {
+    "600396": {
+      "code": "600396",
+      "qty": 9400,
+      "available_qty": 0,
+      "avg_cost": 15.81,
+      "last_price": 15.81,
+      "pending": [
+        {
+          "qty": 9400,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    },
+    "000021": {
+      "code": "000021",
+      "qty": 4100,
+      "available_qty": 0,
+      "avg_cost": 36.3,
+      "last_price": 36.3,
+      "pending": [
+        {
+          "qty": 4100,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    },
+    "300209": {
+      "code": "300209",
+      "qty": 4000,
+      "available_qty": 0,
+      "avg_cost": 36.74,
+      "last_price": 36.74,
+      "pending": [
+        {
+          "qty": 4000,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    },
+    "603256": {
+      "code": "603256",
+      "qty": 1100,
+      "available_qty": 0,
+      "avg_cost": 129.42,
+      "last_price": 129.42,
+      "pending": [
+        {
+          "qty": 1100,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    },
+    "688519": {
+      "code": "688519",
+      "qty": 400,
+      "available_qty": 0,
+      "avg_cost": 309.43,
+      "last_price": 309.43,
+      "pending": [
+        {
+          "qty": 400,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    }
+  },
+  "params": {
+    "init_cash": 1000000.0,
+    "lot": 100,
+    "target_pct": 0.15
+  }
+}

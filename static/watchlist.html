@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的盯盘 - A股分析</title>
+<style>
+:root { --bg:#0f1923; --card:#1a2634; --border:#2a3a4a; --text:#e0e6ed; --text2:#8899aa; --red:#f5475b; --green:#2ec47c; --blue:#3b82f6; --gold:#f0b90b; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,"Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+.header { background:var(--card); border-bottom:1px solid var(--border); padding:16px 24px; display:flex; align-items:center; gap:16px; position:sticky; top:0; z-index:100; flex-wrap:wrap; }
+.header h1 { font-size:18px; white-space:nowrap; color:var(--gold); }
+.nav { display:flex; gap:8px; margin-right:12px; flex-wrap:wrap; }
+.nav a { padding:6px 14px; border-radius:6px; font-size:13px; color:var(--text2); text-decoration:none; border:1px solid var(--border); transition:all .2s; }
+.nav a:hover, .nav a.active { color:#fff; border-color:var(--blue); background:var(--blue); }
+.container { max-width:1400px; margin:0 auto; padding:20px; }
+.toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+.btn { padding:10px 18px; border:none; border-radius:6px; font-size:14px; cursor:pointer; font-weight:500; }
+.btn-primary { background:var(--blue); color:#fff; }
+.btn-outline { background:transparent; color:var(--text2); border:1px solid var(--border); }
+.muted { color:var(--text2); font-size:12px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; }
+.card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px 20px; }
+.card h2 { font-size:16px; margin-bottom:4px; }
+.card .code { color:var(--text2); font-size:12px; margin-bottom:12px; }
+.row { display:flex; justify-content:space-between; gap:8px; margin:6px 0; font-size:13px; }
+.row .k { color:var(--text2); }
+.row .v { font-weight:600; text-align:right; }
+.up { color:var(--red); }
+.down { color:var(--green); }
+.grade { display:inline-block; padding:2px 8px; border-radius:999px; background:#1e3a5f; color:var(--gold); font-size:12px; }
+.summary { margin-top:12px; padding-top:12px; border-top:1px solid var(--border); font-size:13px; line-height:1.6; color:var(--text); }
+.error { color:var(--red); }
+.asof { margin-top:10px; font-size:11px; color:var(--text2); }
+.asof-box { margin-top:12px; padding:10px 12px; border-radius:8px; background:#132033; border:1px solid #2a4a6a; font-size:12px; line-height:1.5; }
+.asof-box b { color:var(--gold); }
+.risk { margin-top:12px; padding:10px 12px; border-radius:8px; background:#2d1b1b; border:1px solid #5c2020; font-size:12px; line-height:1.5; color:#f5b4b4; }
+.risk .title { color:#f5475b; font-weight:600; margin-bottom:4px; }
+
+a.detail { color:var(--blue); text-decoration:none; font-size:12px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>我的盯盘</h1>
+      <div class="nav">
+    <a href="/">个股分析</a>
+    <a href="/compare.html">选股对比</a>
+    <a href="/backtest.html">回测验证</a>
+    <a href="/paper.html">模拟盘</a>
+    <a href="/watchlist.html" class="active">我的盯盘</a>
+    <a href="/market_overview.html">市场概览</a>
+    <a href="/market.html">板块排行</a>
+    <a href="/stock_picker.html">机会扫描</a>
+  </div>
+</div>
+<div class="container">
+  <div class="toolbar">
+    <button class="btn btn-primary" onclick="refreshAll(true)">一键刷新</button>
+    <button class="btn btn-outline" onclick="refreshAll(false)">普通刷新</button>
+    <span class="muted" id="meta">默认自选：北京文化 / 科伦药业 / 美格智能</span>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const WATCH = [
+  { code: '000802', name: '北京文化' },
+  { code: '002422', name: '科伦药业' },
+  { code: '002881', name: '美格智能' },
+];
+function clsPct(v){const n=Number(v); if(Number.isNaN(n)) return ''; return n>=0?'up':'down';}
+function fmt(v,d=2){ if(v===null||v===undefined||v==='') return '-'; if(typeof v==='number') return v.toLocaleString('zh-CN',{maximumFractionDigits:d}); return String(v);}
+function pct(v){ if(v===null||v===undefined||Number.isNaN(Number(v))) return '-'; const n=Number(v); return (n>0?'+':'')+n.toFixed(2)+'%'; }
+
+function cardSkeleton(item){
+  return `<div class="card" id="card-${item.code}"><h2>${item.name}</h2><div class="code">${item.code} · 加载中…</div></div>`;
+}
+
+function renderCard(item, data, err){
+  const el=document.getElementById('card-'+item.code);
+  if(err){ el.innerHTML=`<h2>${item.name}</h2><div class="code">${item.code}</div><div class="error">${err}</div>`; return; }
+  const snap=data.snapshot||{};
+  const name=snap.name||item.name;
+  const price=snap.price??snap.last??data.price;
+  const chg=snap.change_pct??snap.pct_chg??data.change_pct;
+  const turnover=snap.turnover??snap.turnover_rate;
+  const score=data.score;
+  const grade=data.grade||(data.score_detail&&data.score_detail.grade)||'';
+  const levels=data.levels||{};
+  const support=levels.support??levels.zd??(data.chan&&data.chan.zd);
+  const resist=levels.resistance??levels.zg??(data.chan&&data.chan.zg);
+  const summary=data.summary||(data.prediction&&(data.prediction.outlook||data.prediction.summary))||'暂无一句话结论';
+  const asof=data.data_asof||'-';
+  const session=data.session_state||'-';
+  const sources=Array.isArray(data.sources)?data.sources.join(' / '):(data.sources||'-');
+  const risks=data.risk_events||[];
+  el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;gap:8px">
+      <div><h2>${name}</h2><div class="code">${item.code} <a class="detail" href="/?q=${item.code}" target="_blank">详情</a></div></div>
+      <div style="text-align:right"><div style="font-size:22px;font-weight:700">${fmt(price)}</div><div class="${clsPct(chg)}" style="font-weight:600">${pct(chg)}</div></div>
+    </div>
+    <div class="row"><span class="k">换手</span><span class="v">${turnover==null?'-':fmt(turnover)+'%'}</span></div>
+    <div class="row"><span class="k">评分 / 等级</span><span class="v">${fmt(score,1)} ${grade?`<span class="grade">${grade}</span>`:''}</span></div>
+    <div class="row"><span class="k">支撑</span><span class="v">${fmt(support)}</span></div>
+    <div class="row"><span class="k">阻力</span><span class="v">${fmt(resist)}</span></div>
+    <div class="summary">${summary}</div>
+    <div class="risk"><div class="title">事件 / 风险</div>${(risks.length?risks:['暂无公告摘要（占位）']).map(x=>'• '+x).join('<br>')}</div>
+    <div class="asof-box"><b>数据截止</b>：${asof}<br><b>会话</b>：${session}<br><b>来源</b>：${sources}</div>
+  `;
+}
+
+async function refreshAll(fresh){
+  const meta=document.getElementById('meta');
+  meta.textContent=fresh?'强制刷新中…':'刷新中…';
+  const grid=document.getElementById('grid');
+  grid.innerHTML=WATCH.map(cardSkeleton).join('');
+  const t0=Date.now();
+  const codes=WATCH.map(x=>x.code).join(',');
+  try{
+    const q=new URLSearchParams({codes, days:'120'});
+    if(fresh) q.set('fresh','1');
+    const r=await fetch('/api/watchlist?'+q.toString());
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||('HTTP '+r.status));
+    const byCode={};
+    (data.items||[]).forEach(it=>{
+      const code=it.code||it.query;
+      byCode[code]=it;
+    });
+    WATCH.forEach(item=>{
+      const it=byCode[item.code];
+      if(!it){ renderCard(item,null,'无返回'); return; }
+      if(!it.ok){ renderCard(item,null,it.error||'失败'); return; }
+      renderCard(item, it.data||{});
+    });
+    meta.textContent=`已更新 · 耗时 ${((Date.now()-t0)/1000).toFixed(1)}s · /api/watchlist 批量 · ${codes}`;
+  }catch(e){
+    meta.textContent='批量接口失败，请查看错误';
+    WATCH.forEach(item=>renderCard(item,null,e.message||String(e)));
+  }
+}
+refreshAll(false);
+</script>
+</body>
+</html>

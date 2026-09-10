@@ -1,0 +1,80 @@
+{
+  "strategy_id": "ma_cross",
+  "name": "ma_cross",
+  "cash": 295150.6086,
+  "init_cash": 1000000.0,
+  "equity": 999788.6086,
+  "market_value": 704638.0,
+  "positions": {
+    "300394": {
+      "code": "300394",
+      "qty": 500,
+      "available_qty": 0,
+      "avg_cost": 267.95,
+      "last_price": 267.95,
+      "pending": [
+        {
+          "qty": 500,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    },
+    "000988": {
+      "code": "000988",
+      "qty": 1400,
+      "available_qty": 0,
+      "avg_cost": 105.72,
+      "last_price": 105.72,
+      "pending": [
+        {
+          "qty": 1400,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    },
+    "688825": {
+      "code": "688825",
+      "qty": 2600,
+      "available_qty": 0,
+      "avg_cost": 57.53,
+      "last_price": 57.53,
+      "pending": [
+        {
+          "qty": 2600,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    },
+    "601869": {
+      "code": "601869",
+      "qty": 300,
+      "available_qty": 0,
+      "avg_cost": 438.87,
+      "last_price": 438.87,
+      "pending": [
+        {
+          "qty": 300,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    },
+    "002463": {
+      "code": "002463",
+      "qty": 1100,
+      "available_qty": 0,
+      "avg_cost": 128.56,
+      "last_price": 128.56,
+      "pending": [
+        {
+          "qty": 1100,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    }
+  },
+  "params": {
+    "init_cash": 1000000.0,
+    "lot": 100,
+    "target_pct": 0.15
+  }
+}

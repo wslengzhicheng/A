@@ -1,0 +1,54 @@
+{
+  "strategy_id": "ma_cross",
+  "name": "ma_cross",
+  "cash": 568716.6538,
+  "init_cash": 1000000.0,
+  "equity": 999870.6538,
+  "market_value": 431154.0,
+  "positions": {
+    "300394": {
+      "code": "300394",
+      "qty": 500,
+      "available_qty": 0,
+      "avg_cost": 267.9,
+      "last_price": 267.9,
+      "pending": [
+        {
+          "qty": 500,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    },
+    "000988": {
+      "code": "000988",
+      "qty": 1400,
+      "available_qty": 0,
+      "avg_cost": 105.41,
+      "last_price": 105.41,
+      "pending": [
+        {
+          "qty": 1400,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    },
+    "688825": {
+      "code": "688825",
+      "qty": 2600,
+      "available_qty": 0,
+      "avg_cost": 57.55,
+      "last_price": 57.55,
+      "pending": [
+        {
+          "qty": 2600,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    }
+  },
+  "params": {
+    "init_cash": 1000000.0,
+    "lot": 100,
+    "target_pct": 0.15
+  }
+}

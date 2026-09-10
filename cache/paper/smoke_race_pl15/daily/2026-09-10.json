@@ -1,0 +1,57 @@
+{
+  "date": "2026-09-10",
+  "strategies": {
+    "score_gate": {
+      "init_cash": 1000000.0,
+      "equity": 999800.1799,
+      "total_return": -0.0002,
+      "max_drawdown": 0.0,
+      "trade_count": 0,
+      "closed_rounds": 0,
+      "win_rate": null,
+      "buy_count": 5,
+      "sell_count": 0,
+      "fill_count": 5,
+      "fee_total": 199.8201
+    },
+    "chanlun": {
+      "init_cash": 1000000.0,
+      "equity": 1000000.0,
+      "total_return": 0.0,
+      "max_drawdown": 0.0,
+      "trade_count": 0,
+      "closed_rounds": 0,
+      "win_rate": null,
+      "buy_count": 0,
+      "sell_count": 0,
+      "fill_count": 0,
+      "fee_total": 0.0
+    },
+    "ma_cross": {
+      "init_cash": 1000000.0,
+      "equity": 999870.6538,
+      "total_return": -0.000129,
+      "max_drawdown": 0.0,
+      "trade_count": 0,
+      "closed_rounds": 0,
+      "win_rate": null,
+      "buy_count": 3,
+      "sell_count": 0,
+      "fill_count": 3,
+      "fee_total": 129.3462
+    },
+    "macd": {
+      "init_cash": 1000000.0,
+      "equity": 1000000.0,
+      "total_return": 0.0,
+      "max_drawdown": 0.0,
+      "trade_count": 0,
+      "closed_rounds": 0,
+      "win_rate": null,
+      "buy_count": 0,
+      "sell_count": 0,
+      "fill_count": 0,
+      "fee_total": 0.0
+    }
+  }
+}

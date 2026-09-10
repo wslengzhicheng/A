@@ -1,0 +1,80 @@
+{
+  "strategy_id": "score_gate",
+  "name": "score_gate",
+  "cash": 331714.5745,
+  "init_cash": 1000000.0,
+  "equity": 999799.5745,
+  "market_value": 668085.0,
+  "positions": {
+    "300394": {
+      "code": "300394",
+      "qty": 500,
+      "available_qty": 0,
+      "avg_cost": 267.95,
+      "last_price": 267.95,
+      "pending": [
+        {
+          "qty": 500,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    },
+    "300308": {
+      "code": "300308",
+      "qty": 100,
+      "available_qty": 0,
+      "avg_cost": 894.98,
+      "last_price": 894.98,
+      "pending": [
+        {
+          "qty": 100,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    },
+    "000988": {
+      "code": "000988",
+      "qty": 1400,
+      "available_qty": 0,
+      "avg_cost": 105.72,
+      "last_price": 105.72,
+      "pending": [
+        {
+          "qty": 1400,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    },
+    "600176": {
+      "code": "600176",
+      "qty": 3400,
+      "available_qty": 0,
+      "avg_cost": 43.38,
+      "last_price": 43.38,
+      "pending": [
+        {
+          "qty": 3400,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    },
+    "600869": {
+      "code": "600869",
+      "qty": 5700,
+      "available_qty": 0,
+      "avg_cost": 26.16,
+      "last_price": 26.16,
+      "pending": [
+        {
+          "qty": 5700,
+          "buy_date": "2026-09-10"
+        }
+      ]
+    }
+  },
+  "params": {
+    "init_cash": 1000000.0,
+    "lot": 100,
+    "target_pct": 0.15
+  }
+}

@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  a-stock-analyzer:
+    image: a-stock-analyzer:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: a-stock-analyzer
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      - ${CACHE_DIR:-./cache}:/app/cache

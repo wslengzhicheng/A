@@ -1,0 +1,59 @@
+    def _handle_watchlist(self, parsed):
+        """批量盯盘分析：?codes=000802,002422,002881&days=120&fresh=0"""
+        params = parse_qs(parsed.query)
+        codes_raw = params.get("codes", [""])[0].strip() or "000802,002422,002881"
+        codes = [c.strip() for c in re.split(r"[,\s]+", codes_raw) if c.strip()]
+        days_str = params.get("days", [str(DAYS_DEFAULT)])[0]
+        try:
+            days = max(DAYS_MIN, min(DAYS_MAX, int(days_str)))
+        except ValueError:
+            days = DAYS_DEFAULT
+        fresh = params.get("fresh", ["0"])[0] == "1"
+        items = []
+        for query in codes:
+            old_stdout = sys.stdout
+            sys.stdout = captured = io.StringIO()
+            try:
+                market, code, _ = datasource.resolve(query)
+                klines, k_src = datasource.get_kline(market, code, count=DAYS_MAX, fresh=fresh)
+                snapshot, s_src = datasource.get_snapshot(market, code, fresh=fresh)
+                finance, f_src = datasource.get_finance(market, code, fresh=fresh)
+                industry_ctx, i_src = datasource.get_industry_context(
+                    market, code, pe=(snapshot or {}).get("pe_ttm"), fresh=fresh)
+                sources = f"K线:{k_src} 快照:{s_src}" + (f" 财务:{f_src}" if finance else "")
+                if industry_ctx:
+                    sources += f" 行业:{i_src}"
+                result = build_result(
+                    market, code, klines, snapshot, finance, days, sources,
+                    industry_ctx=industry_ctx)
+                result["fund_flow"] = None
+                result["fund_flow_days"] = None
+                raw_messages = captured.getvalue().strip().split("\n") if captured.getvalue().strip() else []
+                result["messages"] = [
+                    ln for ln in raw_messages
+                    if ln and "HTTP/1." not in ln and not ln.startswith(("127.0.0.1", "::1"))
+                ]
+                risks = []
+                for n in (result.get("notes") or []):
+                    if any(k in str(n) for k in ("停牌", "异常", "风险", "亏损", "退市", "警示")):
+                        risks.append(str(n))
+                grade = str(result.get("grade") or "")
+                if any(k in grade for k in ("偏弱", "很弱", "谨慎", "回避", "弱势")):
+                    risks.append(f"综合等级「{grade}」，注意回撤与追高风险")
+                vol = result.get("volatility")
+                try:
+                    if vol is not None and float(vol) >= 0.04:
+                        risks.append(f"波动偏高（volatility={float(vol):.2%}），题材/情绪扰动可能较大")
+                except Exception:
+                    pass
+                if not risks:
+                    risks.append("暂无公告摘要（占位）：请另行核对半年报/监管与异常波动公告")
+                result["risk_events"] = risks[:4]
+                result["query"] = query
+                result["code"] = code
+                items.append({"ok": True, "code": code, "query": query, "data": result})
+            except Exception as e:
+                items.append({"ok": False, "query": query, "error": f"{type(e).__name__}: {e}"})
+            finally:
+                sys.stdout = old_stdout
+        self._json_response_safe(200, {"codes": codes, "count": len(items), "items": items})

@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>板块分析 - A股分析</title>
+<style>
+:root {
+  --bg: #0f1923; --card: #1a2634; --border: #2a3a4a;
+  --text: #e0e6ed; --text2: #8899aa;
+  --red: #f5475b; --green: #2ec47c; --blue: #3b82f6; --gold: #f0b90b;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system,"Microsoft YaHei",sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+.header {
+  background: var(--card); border-bottom: 1px solid var(--border);
+  padding: 16px 24px; display: flex; align-items: center; gap: 16px;
+  position: sticky; top: 0; z-index: 100;
+}
+.header h1 { font-size: 18px; white-space: nowrap; color: var(--gold); }
+.nav { display: flex; gap: 8px; }
+.nav a {
+  padding: 6px 16px; border-radius: 6px; font-size: 14px;
+  color: var(--text2); text-decoration: none; border: 1px solid var(--border);
+  transition: all .2s;
+}
+.nav a:hover, .nav a.active { color: #fff; border-color: var(--blue); background: var(--blue); }
+.container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+.tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.tab {
+  padding: 8px 20px; border-radius: 6px; font-size: 14px; cursor: pointer;
+  background: var(--card); color: var(--text2); border: 1px solid var(--border);
+  transition: all .2s;
+}
+.tab.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 18px 22px; margin-bottom: 16px;
+}
+.card-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: var(--gold); }
+.loading { text-align: center; padding: 60px; color: var(--text2); }
+.spinner {
+  width: 36px; height: 36px; border: 3px solid var(--border);
+  border-top-color: var(--blue); border-radius: 50%;
+  animation: spin 1s linear infinite; margin: 0 auto 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: right; padding: 8px 10px; color: var(--text2); font-weight: 500;
+  border-bottom: 2px solid var(--border); position: sticky; top: 0; background: var(--card);
+}
+th:first-child, th:nth-child(2) { text-align: left; }
+td {
+  text-align: right; padding: 7px 10px; border-bottom: 1px solid #1e2e3e;
+  font-variant-numeric: tabular-nums;
+}
+td:first-child { text-align: center; color: var(--text2); width: 40px; }
+td:nth-child(2) { text-align: left; font-weight: 500; }
+.up { color: var(--red); }
+.down { color: var(--green); }
+.bar-cell { position: relative; }
+.bar-bg {
+  position: absolute; top: 2px; bottom: 2px; border-radius: 3px; opacity: 0.2;
+}
+.bar-text { position: relative; z-index: 1; }
+.rank-badge {
+  display: inline-block; width: 22px; height: 22px; line-height: 22px;
+  text-align: center; border-radius: 4px; font-size: 12px; font-weight: 700;
+}
+.rank-1 { background: var(--red); color: #fff; }
+.rank-2 { background: #e8553d; color: #fff; }
+.rank-3 { background: #d97706; color: #fff; }
+.summary-row {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px; margin-bottom: 16px;
+}
+.summary-item {
+  padding: 14px; background: var(--bg); border-radius: 8px; text-align: center;
+}
+.summary-item .label { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+.summary-item .value { font-size: 20px; font-weight: 700; }
+.clickable { cursor: pointer; }
+.clickable:hover { background: #1e2e3e; }
+@media (max-width: 640px) {
+  .header { flex-wrap: wrap; }
+  table { font-size: 12px; }
+  th, td { padding: 5px 6px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📈 A股分析</h1>
+          <div class="nav">
+    <a href="/">个股分析</a>
+    <a href="/compare.html">选股对比</a>
+    <a href="/backtest.html">回测验证</a>
+    <a href="/paper.html">模拟盘</a>
+    <a href="/watchlist.html">我的盯盘</a>
+    <a href="/market_overview.html">市场概览</a>
+    <a href="/market.html" class="active">板块排行</a>
+    <a href="/stock_picker.html">机会扫描</a>
+  </div>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <div class="tab active" onclick="switchType(this,'industry')">行业板块</div>
+    <div class="tab" onclick="switchType(this,'concept')">概念板块</div>
+  </div>
+
+  <div id="loadingSection" class="loading">
+    <div class="spinner"></div>
+    <p>正在加载板块数据...</p>
+  </div>
+
+  <div id="contentSection" style="display:none">
+    <!-- Summary -->
+    <div class="summary-row" id="summaryRow"></div>
+
+    <!-- Main inflow table -->
+    <div class="card">
+      <div class="card-title">💰 主力资金净流入 Top 板块</div>
+      <div style="overflow-x:auto">
+        <table id="inflowTable"></table>
+      </div>
+    </div>
+
+    <!-- Top change -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <div class="card-title">🔥 涨幅最大板块</div>
+        <table id="topChangeTable"></table>
+      </div>
+      <div class="card">
+        <div class="card-title">📉 资金净流出板块</div>
+        <table id="outflowTable"></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentType = 'industry';
+
+function fmtWan(v) {
+  if(v == null) return '—';
+  const abs = Math.abs(v);
+  if(abs >= 1e8) return (v / 1e8).toFixed(2) + '亿';
+  if(abs >= 1e4) return (v / 1e4).toFixed(0) + '万';
+  return v.toFixed(0);
+}
+
+function cls(v) { return v > 0 ? 'up' : v < 0 ? 'down' : ''; }
+function pct(v) { return v != null ? (v > 0 ? '+' : '') + v.toFixed(2) + '%' : '—'; }
+
+function rankBadge(i) {
+  const n = i + 1;
+  if(n <= 3) return `<span class="rank-badge rank-${n}">${n}</span>`;
+  return `<span style="color:var(--text2)">${n}</span>`;
+}
+
+function switchType(el, type) {
+  currentType = type;
+  el.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  loadData();
+}
+
+async function loadData() {
+  document.getElementById('loadingSection').style.display = '';
+  document.getElementById('contentSection').style.display = 'none';
+  try {
+    const resp = await fetch(`/api/boards?type=${currentType}&count=30`);
+    const data = await resp.json();
+    if(!resp.ok) { alert(data.error); return; }
+    render(data);
+  } catch(e) {
+    alert('加载失败: ' + e.message);
+  } finally {
+    document.getElementById('loadingSection').style.display = 'none';
+  }
+}
+
+function render(data) {
+  const inflow = data.inflow || [];
+  const topChange = data.top_change || [];
+  const outflow = data.outflow || [];
+
+  // Summary: total inflow/outflow
+  let totalIn = 0, totalOut = 0, upSectors = 0, downSectors = 0;
+  inflow.forEach(b => {
+    const net = b.main_net || 0;
+    if(net > 0) { totalIn += net; upSectors++; }
+    else { totalOut += net; downSectors++; }
+  });
+  document.getElementById('summaryRow').innerHTML = `
+    <div class="summary-item">
+      <div class="label">板块类型</div>
+      <div class="value" style="font-size:16px">${currentType==='industry'?'行业板块':'概念板块'}</div>
+    </div>
+    <div class="summary-item">
+      <div class="label">主力净流入板块</div>
+      <div class="value up">${upSectors}</div>
+    </div>
+    <div class="summary-item">
+      <div class="label">主力净流出板块</div>
+      <div class="value down">${downSectors}</div>
+    </div>
+    <div class="summary-item">
+      <div class="label">总净流入</div>
+      <div class="value ${cls(totalIn+totalOut)}">${fmtWan(totalIn+totalOut)}</div>
+    </div>
+  `;
+
+  // Main inflow table
+  const maxNet = Math.max(...inflow.map(b => Math.abs(b.main_net||0)), 1);
+  let html = `<thead><tr>
+    <th>#</th><th>板块名称</th><th>涨跌幅</th><th>主力净流入</th><th>主力占比</th>
+    <th>超大单净流入</th><th>大单净流入</th><th>中单净流入</th><th>小单净流入</th>
+    <th>涨/跌</th>
+  </tr></thead><tbody>`;
+  inflow.forEach((b, i) => {
+    const net = b.main_net || 0;
+    const barW = Math.abs(net) / maxNet * 100;
+    const barColor = net >= 0 ? 'var(--red)' : 'var(--green)';
+    html += `<tr class="clickable" onclick="goStock('${b.name}')">
+      <td>${rankBadge(i)}</td>
+      <td>${b.name}</td>
+      <td class="${cls(b.change_pct)}">${pct(b.change_pct)}</td>
+      <td class="bar-cell ${cls(net)}">
+        <div class="bar-bg" style="width:${barW}%;background:${barColor};${net>=0?'left:0':'right:0'}"></div>
+        <span class="bar-text">${fmtWan(net)}</span>
+      </td>
+      <td class="${cls(b.main_pct)}">${pct(b.main_pct)}</td>
+      <td class="${cls(b.super_net)}">${fmtWan(b.super_net)}</td>
+      <td class="${cls(b.big_net)}">${fmtWan(b.big_net)}</td>
+      <td class="${cls(b.mid_net)}">${fmtWan(b.mid_net)}</td>
+      <td class="${cls(b.small_net)}">${fmtWan(b.small_net)}</td>
+      <td><span class="up">${b.up_count}</span>/<span class="down">${b.down_count}</span></td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('inflowTable').innerHTML = html;
+
+  // Top change (compact)
+  let tc = '<thead><tr><th>#</th><th>板块</th><th>涨幅</th><th>主力净流入</th></tr></thead><tbody>';
+  topChange.forEach((b, i) => {
+    tc += `<tr class="clickable" onclick="goStock('${b.name}')">
+      <td>${rankBadge(i)}</td><td>${b.name}</td>
+      <td class="${cls(b.change_pct)}">${pct(b.change_pct)}</td>
+      <td class="${cls(b.main_net)}">${fmtWan(b.main_net)}</td>
+    </tr>`;
+  });
+  tc += '</tbody>';
+  document.getElementById('topChangeTable').innerHTML = tc;
+
+  // Outflow (compact)
+  let of = '<thead><tr><th>#</th><th>板块</th><th>涨幅</th><th>净流出</th></tr></thead><tbody>';
+  outflow.forEach((b, i) => {
+    of += `<tr class="clickable" onclick="goStock('${b.name}')">
+      <td>${i+1}</td><td>${b.name}</td>
+      <td class="${cls(b.change_pct)}">${pct(b.change_pct)}</td>
+      <td class="${cls(b.main_net)}">${fmtWan(b.main_net)}</td>
+    </tr>`;
+  });
+  of += '</tbody>';
+  document.getElementById('outflowTable').innerHTML = of;
+
+  document.getElementById('contentSection').style.display = '';
+}
+
+function goStock(name) {
+  // Could navigate to stock analysis, for now just open in same app
+  // Board names are not directly searchable, but users can explore
+}
+
+// Auto-load on page open
+loadData();
+</script>
+</body>
+</html>

@@ -8,21 +8,24 @@ import time
 from . import datasource
 
 
-def _to_wan(value):
-    if value is None:
-        return 0
+def _safe_num(raw, default=0.0):
+    """Coerce an East Money field to float; treat None, '', '-' and other
+    non-numeric sentinels as *default*."""
+    if raw is None or raw == "" or raw == "-":
+        return default
     try:
-        return float(value) / 10000
+        return float(raw)
     except (TypeError, ValueError):
-        return 0
+        return default
+
+
+def _to_wan(value):
+    return _safe_num(value) / 10000
 
 
 def _pct_from_eastmoney_f3(raw):
     """东财 fltt=2 的 f3 为百分数 → 小数涨跌幅。"""
-    try:
-        return float(raw or 0) / 100.0
-    except (TypeError, ValueError):
-        return 0.0
+    return _safe_num(raw) / 100.0
 
 
 def get_simple_candidates():
@@ -65,16 +68,19 @@ def get_simple_candidates():
 
         # 取涨幅在1-5%的股票（小数区间）
         for it in items:
-            change_pct = _pct_from_eastmoney_f3(it.get("f3"))
-            if 0.01 <= change_pct <= 0.05:
-                candidates.append({
-                    "code": it.get("f12", ""),
-                    "name": it.get("f14", ""),
-                    "market": "sh" if it.get("f12", "").startswith(("60", "68")) else "sz",
-                    "change_pct": change_pct,
-                    "main_net": _to_wan(it.get("f62", 0)),
-                    "reason": "温和上涨"
-                })
+            try:
+                change_pct = _pct_from_eastmoney_f3(it.get("f3"))
+                if 0.01 <= change_pct <= 0.05:
+                    candidates.append({
+                        "code": it.get("f12", ""),
+                        "name": it.get("f14", ""),
+                        "market": "sh" if it.get("f12", "").startswith(("60", "68")) else "sz",
+                        "change_pct": change_pct,
+                        "main_net": _to_wan(it.get("f62", 0)),
+                        "reason": "温和上涨"
+                    })
+            except Exception:
+                continue
     except Exception:
         pass
 

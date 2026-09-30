@@ -137,12 +137,20 @@ def get_candidates():
     return unique_candidates[:CANDIDATE_COUNT]
 
 
+def _safe_num(raw, default=0.0):
+    """Coerce an East Money field to float; treat None, '', '-' and other
+    non-numeric sentinels as *default*."""
+    if raw is None or raw == "" or raw == "-":
+        return default
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return default
+
+
 def _pct_from_eastmoney_f3(raw):
     """东财 fltt=2 的 f3 为百分数 → 小数涨跌幅。"""
-    try:
-        return float(raw or 0) / 100.0
-    except (TypeError, ValueError):
-        return 0.0
+    return _safe_num(raw) / 100.0
 
 
 def _fetch_top_stocks_by_main_net(count, direction="in"):
@@ -158,36 +166,37 @@ def _fetch_top_stocks_by_main_net(count, direction="in"):
         from .sources import http_get
         # 直接复用东财接口获取资金流排行
         r = http_get("https://push2.eastmoney.com/api/qt/clist/get", params={
-            "fid": "f62",  # 按主力净流入排序
+            "fid": "f62",
             "po": "1" if direction == "in" else "0",
             "pz": str(count + 20),
             "pn": "1", "np": "1",
             "fltt": "2", "invt": "2",
             "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
-            "fields": "f12,f14,f3,f62,f116,f117,f107"
+            "fields": "f12,f14,f3,f62,f107"
         })
         data = r.json()
         items = (data.get("data") or {}).get("diff") or []
 
         stocks = []
         for it in items[:count]:
-            code = it.get("f12", "")
-            name = it.get("f14", "")
-            change_pct = _pct_from_eastmoney_f3(it.get("f3"))
-            main_net = it.get("f62", 0)
+            try:
+                code = it.get("f12", "")
+                name = it.get("f14", "")
+                change_pct = _pct_from_eastmoney_f3(it.get("f3"))
+                main_net = _safe_num(it.get("f62"))
 
-            # 确定市场
-            market = "sh" if code.startswith(("60", "68")) else "sz"
+                market = "sh" if code.startswith(("60", "68")) else "sz"
 
-            stocks.append({
-                "code": code,
-                "name": name,
-                "market": market,
-                "change_pct": change_pct,
-                "main_net": main_net,
-                "mktcap_total": (float(it.get("f116", 0)) or 0) / 10000,  # 亿元
-                "volume": it.get("f107", 0)
-            })
+                stocks.append({
+                    "code": code,
+                    "name": name,
+                    "market": market,
+                    "change_pct": change_pct,
+                    "main_net": main_net,
+                    "volume": _safe_num(it.get("f107"))
+                })
+            except Exception:
+                continue
 
         return stocks
     except Exception as e:
@@ -208,37 +217,37 @@ def _fetch_stocks_by_change_range(count, min_change, max_change):
     try:
         from .sources import http_get
 
-        # 获取全市场股票数据
         r = http_get("https://push2.eastmoney.com/api/qt/clist/get", params={
             "fid": "f3",
             "po": "1" if max_change > 0 else "0",
-            "pz": "2000",  # 获取足够多的股票
+            "pz": "2000",
             "pn": "1", "np": "1",
             "fltt": "2", "invt": "2",
             "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
-            "fields": "f12,f14,f2,f3,f62,f116,f117,f107"
+            "fields": "f12,f14,f2,f3,f62,f107"
         })
         data = r.json()
         items = (data.get("data") or {}).get("diff") or []
 
         stocks = []
         for it in items:
-            code = it.get("f12", "")
-            name = it.get("f14", "")
-            change_pct = _pct_from_eastmoney_f3(it.get("f3"))
+            try:
+                code = it.get("f12", "")
+                name = it.get("f14", "")
+                change_pct = _pct_from_eastmoney_f3(it.get("f3"))
 
-            # 筛选涨跌幅范围
-            if min_change <= change_pct <= max_change:
-                market = "sh" if code.startswith(("60", "68")) else "sz"
-                stocks.append({
-                    "code": code,
-                    "name": name,
-                    "market": market,
-                    "change_pct": change_pct,
-                    "main_net": it.get("f62", 0),
-                    "mktcap_total": (it.get("f116") or 0) / 10000,
-                    "volume": it.get("f107", 0)
-                })
+                if min_change <= change_pct <= max_change:
+                    market = "sh" if code.startswith(("60", "68")) else "sz"
+                    stocks.append({
+                        "code": code,
+                        "name": name,
+                        "market": market,
+                        "change_pct": change_pct,
+                        "main_net": _safe_num(it.get("f62")),
+                        "volume": _safe_num(it.get("f107"))
+                    })
+            except Exception:
+                continue
 
         return stocks[:count]
     except Exception as e:

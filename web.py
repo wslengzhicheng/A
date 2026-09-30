@@ -10,6 +10,7 @@ import json
 import math
 import os
 import sys
+import time
 import traceback
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -19,10 +20,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from stock import DAYS_DEFAULT, DAYS_MAX, DAYS_MIN, build_result
 from stocklib import datasource
 from stocklib import stock_picker
+from stocklib import s2 as s2_engine
+from stocklib import ocr_portfolio
 from stocklib.stock_picker_simple import find_buy_opportunities_simple
 from stocklib.errors import NetworkError, NotFoundError, StockError
 from stocklib.sources import index as index_source
 from stocklib.paper import webapi as paper_webapi
+
+AANALYST_TOKEN = os.environ.get("AANALYST_TOKEN", "")
+S2_REQUIRE_TOKEN_READ = True
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
@@ -42,6 +48,24 @@ class StockHandler(SimpleHTTPRequestHandler):
 
     def log_message(self, format, *args):
         print(f"[web] {args[0]}" if args else "")
+
+    # ---------- auth helpers ----------
+
+    def _check_token(self):
+        """Validate Bearer token or ?token= query param.  Returns True if OK."""
+        if not AANALYST_TOKEN:
+            return True
+        auth = self.headers.get("Authorization", "")
+        if auth.startswith("Bearer ") and auth[7:].strip() == AANALYST_TOKEN:
+            return True
+        parsed = urlparse(self.path)
+        token_qs = parse_qs(parsed.query).get("token", [""])[0]
+        if token_qs == AANALYST_TOKEN:
+            return True
+        return False
+
+    def _reject_token(self):
+        self._json_response(401, {"error": "需要有效的 AANALYST_TOKEN"})
 
     def _clean_json_data(self, data):
         """递归清理JSON数据中的Infinity和NaN值"""
@@ -73,7 +97,15 @@ class StockHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
-        if path == "/api/analyze":
+        if path == "/api/health":
+            self._handle_health(parsed)
+        elif path == "/api/s2":
+            self._handle_s2_single(parsed)
+        elif path == "/api/s2/scan":
+            self._handle_s2_scan(parsed)
+        elif path == "/api/s2/diff":
+            self._handle_s2_diff(parsed)
+        elif path == "/api/analyze":
             self._handle_analyze(parsed)
         elif path == "/api/watchlist":
             self._handle_watchlist(parsed)
@@ -739,9 +771,19 @@ class StockHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
-        """本地启停模拟盘（无鉴权，勿对公网暴露）。"""
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
+
+        if path == "/api/s2/scan":
+            self._handle_s2_scan_post(parsed)
+            return
+        if path == "/api/s2/diff":
+            self._handle_s2_diff_post(parsed)
+            return
+        if path == "/api/portfolio/ocr":
+            self._handle_portfolio_ocr(parsed)
+            return
+
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
@@ -760,7 +802,6 @@ class StockHandler(SimpleHTTPRequestHandler):
                 self._json_response_safe(code, data)
                 return
             parts = [p for p in path.split("/") if p]
-            # /paper/runs/<id>/stop
             if len(parts) == 4 and parts[0] == "paper" and parts[1] == "runs" and parts[3] == "stop":
                 data = paper_webapi.stop_run(parts[2])
                 code = 404 if data.get("error") == "run_not_found" else 200
@@ -770,6 +811,216 @@ class StockHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             traceback.print_exc()
             self._json_response(500, {"error": "%s: %s" % (type(e).__name__, e)})
+
+    # ---------- health ----------
+
+    def _handle_health(self, parsed):
+        ds_ok = True
+        ds_error = None
+        try:
+            from stocklib.sources import tencent
+            tencent.fetch_snapshot("sh", "000001")
+        except Exception as e:
+            ds_ok = False
+            ds_error = f"{type(e).__name__}: {e}"
+        body = {
+            "status": "ok" if ds_ok else "degraded",
+            "time": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "datasource_ok": ds_ok,
+        }
+        if ds_error:
+            body["datasource_error"] = ds_error
+        try:
+            from stocklib.paper import webapi as pw
+            runs = pw.list_runs()
+            active = [r for r in runs if r.get("status") == "running"]
+            if active:
+                body["paper_active_run_id"] = active[0].get("id")
+        except Exception:
+            pass
+        body["token_configured"] = bool(AANALYST_TOKEN)
+        self._json_response(200, body)
+
+    # ---------- S2 helpers ----------
+
+    def _fetch_klines_for_s2(self, code):
+        """Resolve code → klines for S2. Returns (klines, market, name, {})."""
+        market, resolved_code, name = datasource.resolve(code)
+        klines, _src = datasource.get_kline(market, resolved_code, count=DAYS_MAX)
+        if not name:
+            try:
+                snap, _ = datasource.get_snapshot(market, resolved_code)
+                name = (snap or {}).get("name")
+            except Exception:
+                pass
+        return klines, market, name or "", {}
+
+    def _handle_s2_single(self, parsed):
+        if S2_REQUIRE_TOKEN_READ and not self._check_token():
+            self._reject_token()
+            return
+        params = parse_qs(parsed.query)
+        q = params.get("q", [""])[0].strip()
+        if not q:
+            self._json_response(400, {"error": "请传入 q=股票代码"})
+            return
+        cost = params.get("cost", [None])[0]
+        if cost is not None:
+            try:
+                cost = float(cost)
+            except ValueError:
+                cost = None
+        try:
+            klines, market, name, _ = self._fetch_klines_for_s2(q)
+            result = s2_engine.compute_s2(klines, cost=cost)
+            result["code"] = q
+            result["name"] = name
+            result["market"] = market
+            self._json_response(200, result)
+        except NotFoundError as e:
+            self._json_response(404, {"error": str(e)})
+        except NetworkError as e:
+            self._json_response(502, {"error": str(e)})
+        except Exception as e:
+            traceback.print_exc()
+            self._json_response(500, {"error": f"{type(e).__name__}: {e}"})
+
+    def _parse_scan_items(self, params=None, payload=None):
+        """Parse scan items from query string or JSON body."""
+        if payload and isinstance(payload, dict):
+            if "positions" in payload:
+                return payload["positions"]
+            if "codes" in payload:
+                codes = payload["codes"]
+                if isinstance(codes, str):
+                    codes = [c.strip() for c in re.split(r"[,\s]+", codes) if c.strip()]
+                return [{"code": c} for c in codes]
+        if params:
+            codes_raw = params.get("codes", [""])[0].strip()
+            if codes_raw:
+                codes = [c.strip() for c in re.split(r"[,\s]+", codes_raw) if c.strip()]
+                return [{"code": c} for c in codes]
+        return []
+
+    def _handle_s2_scan(self, parsed):
+        if S2_REQUIRE_TOKEN_READ and not self._check_token():
+            self._reject_token()
+            return
+        params = parse_qs(parsed.query)
+        items = self._parse_scan_items(params=params)
+        if not items:
+            self._json_response(400, {"error": "请传入 codes 或 positions"})
+            return
+        try:
+            results = s2_engine.scan(items, self._fetch_klines_for_s2)
+            self._json_response(200, {"count": len(results), "results": results})
+        except Exception as e:
+            traceback.print_exc()
+            self._json_response(500, {"error": f"{type(e).__name__}: {e}"})
+
+    def _handle_s2_scan_post(self, parsed):
+        if not self._check_token():
+            self._reject_token()
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        raw = self.rfile.read(length) if length > 0 else b"{}"
+        try:
+            payload = json.loads(raw.decode("utf-8") or "{}")
+        except Exception:
+            payload = {}
+        items = self._parse_scan_items(payload=payload)
+        if not items:
+            self._json_response(400, {"error": "请传入 codes 或 positions"})
+            return
+        try:
+            results = s2_engine.scan(items, self._fetch_klines_for_s2)
+            self._json_response(200, {"count": len(results), "results": results})
+        except Exception as e:
+            traceback.print_exc()
+            self._json_response(500, {"error": f"{type(e).__name__}: {e}"})
+
+    def _handle_s2_diff(self, parsed):
+        self._json_response(200, {"info": "POST /api/s2/diff with {current, previous} arrays"})
+
+    def _handle_s2_diff_post(self, parsed):
+        if not self._check_token():
+            self._reject_token()
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        raw = self.rfile.read(length) if length > 0 else b"{}"
+        try:
+            payload = json.loads(raw.decode("utf-8") or "{}")
+        except Exception:
+            payload = {}
+        current = payload.get("current", [])
+        previous = payload.get("previous", [])
+        changes = s2_engine.diff_snapshots(current, previous)
+        notify_count = sum(1 for c in changes if c.get("need_notify"))
+        self._json_response(200, {
+            "changes": changes,
+            "notify_count": notify_count,
+        })
+
+    # ---------- OCR ----------
+
+    def _handle_portfolio_ocr(self, parsed):
+        if not self._check_token():
+            self._reject_token()
+            return
+        content_type = self.headers.get("Content-Type", "")
+        if "multipart/form-data" not in content_type:
+            self._json_response(400, {"error": "需要 multipart/form-data 上传图片"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0 or length > 20 * 1024 * 1024:
+            self._json_response(400, {"error": "图片大小需在 20MB 以内"})
+            return
+        raw = self.rfile.read(length)
+        image_bytes, filename = self._extract_multipart_file(raw, content_type)
+        if not image_bytes:
+            self._json_response(400, {"error": "未找到上传的图片文件"})
+            return
+        raw_text, engine, warnings = ocr_portfolio.ocr_image(image_bytes, filename)
+        positions = ocr_portfolio.parse_positions(raw_text)
+        self._json_response(200, {
+            "positions": positions,
+            "raw_text": raw_text[:2000] if raw_text else None,
+            "engine": engine,
+            "warnings": warnings,
+        })
+
+    def _extract_multipart_file(self, raw, content_type):
+        """Minimal multipart parser to extract the first file's bytes and filename."""
+        boundary_match = re.search(r"boundary=([^\s;]+)", content_type)
+        if not boundary_match:
+            return None, ""
+        boundary = boundary_match.group(1).encode()
+        parts = raw.split(b"--" + boundary)
+        for part in parts:
+            if b"Content-Disposition" not in part:
+                continue
+            header_end = part.find(b"\r\n\r\n")
+            if header_end < 0:
+                continue
+            header = part[:header_end].decode("utf-8", errors="replace")
+            body = part[header_end + 4:]
+            if body.endswith(b"\r\n"):
+                body = body[:-2]
+            if b"filename=" not in part[:header_end]:
+                continue
+            fn_match = re.search(r'filename="?([^";\r\n]+)"?', header)
+            filename = fn_match.group(1) if fn_match else "upload.png"
+            return body, filename
+        return None, ""
 
     def _serve_static(self, path):
         if path == "/" or path == "":
